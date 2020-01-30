@@ -1,4 +1,4 @@
-# youmate
+# Youmate
 
 A new Flutter application.
 
