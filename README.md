@@ -1,6 +1,6 @@
 # youmate
 
-A new Flutter application.
+A new Flutter application for watch and download youtube videos.
 
 ## Getting Started
 
