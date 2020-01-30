@@ -1,11 +1,8 @@
-import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:youtube_api/youtube_api.dart';
-import 'package:youtube_extractor/youtube_extractor.dart';
-import 'package:path_provider/path_provider.dart';
 import 'video_view.dart';
 import 'config/config.dart';
 
@@ -41,21 +38,17 @@ class _MyHomePageState extends State<MyHomePage> {
   List filteredNames = new List(); // names filtered by search text
   Icon _searchIcon = new Icon(Icons.search);
   TextEditingController _filter;
-  String videoUrl = '';
+  YoutubeAPI ytApi = new YoutubeAPI(key);
   List<YT_API> ytResult = [];
-  YoutubeAPI ytApi;
   Widget _appBarTitle = new Text('YouMate Search & Download');
-  ReceivePort _port = ReceivePort();
-  var extractor = YouTubeExtractor();
+  int gridCount = 2;
 
   @override
   void initState() {
     super.initState();
     _filter = new TextEditingController();
-    ytApi = new YoutubeAPI(key);
-    _getNames();
-
-    _filter.addListener(() {
+    _getNames(_searchText);
+    _filter.addListener(() async {
       if (_filter.text.isEmpty) {
         setState(() {
           _searchText = "";
@@ -66,29 +59,14 @@ class _MyHomePageState extends State<MyHomePage> {
           _searchText = _filter.text;
         });
       }
-      _getNames();
+      setState(() async {
+        await _getNames(_searchText);
+      });
     });
-
-//    FlutterDownloader.initialize();
-//    IsolateNameServer.registerPortWithName(_port.sendPort, 'downloader_send_port');
-//    _port.listen((dynamic data) {
-//      String id = data[0];
-//      DownloadTaskStatus status = data[1];
-//      int progress = data[2];
-//      setState((){ });
-//    });
-//    FlutterDownloader.registerCallback(downloadCallback);
-  }
-
-  static void downloadCallback(
-      String id, DownloadTaskStatus status, int progress) {
-//    final SendPort send = IsolateNameServer.lookupPortByName('downloader_send_port');
-//    send.send([id, status, progress]);
   }
 
   @override
   void dispose() {
-    //IsolateNameServer.removePortNameMapping('downloader_send_port');
     super.dispose();
   }
 
@@ -106,15 +84,32 @@ class _MyHomePageState extends State<MyHomePage> {
         body: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.black, Color(0xFF4E4E4E)],
+              colors: [Colors.white, Color(0xFF4E4E4E)],
               begin: Alignment(10.0, 10.0),
               end: Alignment(5.0, 5.0),
             ),
           ),
-          child: ListView.builder(
-              scrollDirection: Axis.vertical,
-              itemCount: ytResult.length,
-              itemBuilder: (_, int index) => listCards(index)),
+          child: Container(
+              margin: const EdgeInsets.only(
+                top: 16.0,
+                bottom: 16.0,
+                left: 16.0,
+                right: 16.0,
+              ),
+              child: LiquidPullToRefresh(
+                onRefresh: () async {
+                  _getNames(_searchText);
+                }, // refresh callback
+                backgroundColor: Colors.white,
+                color: Colors.transparent,
+                showChildOpacityTransition: false,
+                child: GridView.builder(
+                    gridDelegate: new SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: gridCount),
+                    itemCount: ytResult.length,
+                    itemBuilder: (_, int index) =>
+                        listCards(index)), // scroll view
+              )),
         ));
   }
 
@@ -131,21 +126,13 @@ class _MyHomePageState extends State<MyHomePage> {
   _downloadVideo(url) async {
     print("Download youtube url: ${url}");
     if (url != null) {
-      var musicVideoInfo = await extractor.getMediaStreamsAsync(url);
-      var urlVideo = musicVideoInfo.video.first.url;
-      print(urlVideo);
-//      final taskId = await FlutterDownloader.enqueue(
-//        url: urlVideo,
-//        savedDir: StorageDirectory.downloads.toString(),
-//        showNotification: true, // show download progress in status bar (for Android)
-//        openFileFromNotification: true, // click on notification to open downloaded file (for Android)
-//      );
-//      final tasks = await FlutterDownloader.loadTasks();
+      print(url);
     }
   }
 
-  _getNames() async {
-    ytResult = await ytApi.search(_searchText, type: 'video');
+  _getNames(_searchText) async {
+    var list = await ytApi.search(_searchText, type: 'video');
+    setState(() => ytResult = list);
   }
 
   void _searchPressed() {
@@ -170,63 +157,16 @@ class _MyHomePageState extends State<MyHomePage> {
     return new Card(
       semanticContainer: true,
       clipBehavior: Clip.antiAliasWithSaveLayer,
-      child: new Container(
-        child: new Row(
-          children: <Widget>[
-            new Image.network(ytResult[index].thumbnail['default']['url'],
-                fit: BoxFit.fill),
-            new Padding(padding: EdgeInsets.only(right: 20.0)),
-            new Expanded(
-                child: new Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  new GestureDetector(
-                    child: Text(ytResult[index].title,
-                        softWrap: true,
-                        style: TextStyle(fontSize: 16.0),
-                        textAlign: TextAlign.left
-                    ),
-                    onTap: () {
-                      _watchVideo(ytResult[index].id);
-                    },
-                  ),
-                  Padding(padding: EdgeInsets.only(bottom: 1.5)),
-                  Text(
-                    ytResult[index].channelTitle,
-                    softWrap: true,
-                  ),
-                  Padding(padding: EdgeInsets.only(bottom: 3.0)),
-                  Row(
-                    children: <Widget>[
-                      new Expanded(
-                        child: new Text(""),
-                      ),
-                      new Container(
-                          margin: EdgeInsets.only(right: 5.0),
-                          width: 30.0,
-                          height: 30.0,
-                          child: Align(
-                            alignment: AlignmentDirectional.bottomEnd,
-                            heightFactor: 0.0,
-                            child: FloatingActionButton(
-                              onPressed: () {
-                                _downloadVideo(ytResult[index].id);
-                              },
-                              child: Icon(
-                                Icons.file_download,
-                                size: 15.0,
-                              ),
-                            ),
-                          ))
-                    ],
-                  ),
-                ]))
-          ],
-        ),
-      ),
+      child: Container(
+          height: 150,
+          decoration: BoxDecoration(
+              image: DecorationImage(
+                  image:
+                      NetworkImage(ytResult[index].thumbnail['default']['url']),
+                  fit: BoxFit.fill)),
+          child: SizedBox()),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10.0),
+        borderRadius: BorderRadius.circular(20.0),
       ),
       elevation: 5,
       margin: EdgeInsets.all(10),
